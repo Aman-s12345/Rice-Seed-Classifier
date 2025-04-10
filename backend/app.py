@@ -45,7 +45,7 @@ class FPN(torch.nn.Module):
 num_classes = 10  # Change this based on your model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = FPN(num_classes=num_classes).to(device)
-model.load_state_dict(torch.load("fpn_model.pth", map_location=device))
+model.load_state_dict(torch.load("models/fpn_model.pth", map_location=device))
 model.eval()
 
 # Define preprocessing
