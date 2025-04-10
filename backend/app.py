@@ -1,26 +1,18 @@
-import os
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import torch
-from torch import nn
-import torchvision.transforms as transforms
-from PIL import Image
 import io
+from flask import Flask, request, jsonify
+from PIL import Image
+import torch
+import torchvision.transforms as transforms
+from flask_cors import CORS
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-
-# Path to your trained model
-MODEL_PATH = os.path.join('models', 'fpn_model.pth')
-
-# Define CNN Backbone
-class BasicCNN(nn.Module):
+# Load trained model (same architecture as before)
+class BasicCNN(torch.nn.Module):
     def __init__(self):
         super(BasicCNN, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv1 = torch.nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1)
+        self.conv2 = torch.nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.conv3 = torch.nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
+        self.pool = torch.nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, x):
         x = self.pool(torch.relu(self.conv1(x)))
@@ -31,16 +23,15 @@ class BasicCNN(nn.Module):
         f3 = x
         return f1, f2, f3
 
-# Define Feature Pyramid Network (FPN) Head
-class FPN(nn.Module):
-    def __init__(self, num_classes=10):  # Changed back to 10 classes to match trained model
+class FPN(torch.nn.Module):
+    def __init__(self, num_classes):
         super(FPN, self).__init__()
         self.backbone = BasicCNN()
-        self.lat_conv1 = nn.Conv2d(64, 256, kernel_size=1)
-        self.lat_conv2 = nn.Conv2d(128, 256, kernel_size=1)
-        self.lat_conv3 = nn.Conv2d(256, 256, kernel_size=1)
-        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
-        self.final_conv = nn.Conv2d(256, num_classes, kernel_size=3, padding=1)
+        self.lat_conv1 = torch.nn.Conv2d(64, 256, kernel_size=1)
+        self.lat_conv2 = torch.nn.Conv2d(128, 256, kernel_size=1)
+        self.lat_conv3 = torch.nn.Conv2d(256, 256, kernel_size=1)
+        self.upsample = torch.nn.Upsample(scale_factor=2, mode='nearest')
+        self.final_conv = torch.nn.Conv2d(256, num_classes, kernel_size=3, padding=1)
 
     def forward(self, x):
         f1, f2, f3 = self.backbone(x)
@@ -50,72 +41,60 @@ class FPN(nn.Module):
         out = self.final_conv(p1)
         return out.mean([2, 3])
 
-# Define the class labels globally - use only the first 10 since model has 10 classes
+# Load model
+num_classes = 10  # Change this based on your model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = FPN(num_classes=num_classes).to(device)
+model.load_state_dict(torch.load("fpn_model.pth", map_location=device))
+model.eval()
+
+# Define preprocessing
+transform = transforms.Compose([
+    transforms.Resize((128, 128)),
+    transforms.ToTensor()
+])
+
+# Flask app
+app = Flask(__name__)
+CORS(app)
+
 CLASS_LABELS = [
-  "Blwrc -GA",
-  "Bwr-2",
-  "Jyothi",
-  "Kau Manu ratna(km-1)",
-  "Menu verna",
-  "Pour nami (p-1)",
-  "Sreyas",
-  "Uma-1"
+    "Blwrc -GA",
+    "Bwr-2",
+    "Jyothi",
+    "Kau Manu ratna(km-1)",
+    "Menu verna",
+    "Pour nami (p-1)",
+    "Sreyas",
+    "Uma-1"
 ]
 
-# Create the models directory if it doesn't exist
-if not os.path.exists('models'):
-    os.makedirs('models')
-
-# Load model
-try:
-    model = FPN()
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
-    model.eval()
-    print("FPN model loaded successfully")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    # You might want to terminate the application here if model loading fails
-    # Or use a fallback model
-
-# Image preprocessing - resize to fixed dimensions to avoid size mismatches
-def preprocess_image(image_bytes):
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),  # Resize to fixed dimensions
-        transforms.ToTensor(),
-    ])
-    
-    image = Image.open(io.BytesIO(image_bytes))
-    
-    
-    return transform(image).unsqueeze(0)  # Add batch dimension
-
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image provided'}), 400
-    
-    image_file = request.files['image']
-    image_bytes = image_file.read()
-    
-    if not image_bytes:
-        return jsonify({'error': 'Empty image'}), 400
-    
-    try:
-        tensor = preprocess_image(image_bytes)
-        
-        # Make prediction
-        with torch.no_grad():
-            outputs = model(tensor)
-            probabilities = torch.nn.functional.softmax(outputs, dim=1)
-            confidence, predicted_class = torch.max(probabilities, 1)
-        
-        print(predicted_class.item())
-        return jsonify({
-            'class': CLASS_LABELS[predicted_class.item()],
-            'confidence': confidence.item()
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    if "image" not in request.files:
+        return jsonify({"error": "No image uploaded"}), 400
 
-if __name__ == '__main__':
-    app.run(debug=True) 
+    file = request.files["image"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected"}), 400
+
+    try:
+        img = Image.open(io.BytesIO(file.read())).convert("RGB")
+        img = transform(img).unsqueeze(0).to(device)  # Preprocess
+    except Exception as e:
+        return jsonify({"error": f"Invalid image file: {str(e)}"}), 400
+
+    # Get prediction
+    with torch.no_grad():
+        outputs = model(img)
+        _, predicted = torch.max(outputs, 1)
+        class_index = predicted.item()
+        class_name = CLASS_LABELS[class_index]  # Map index to label
+
+    return jsonify({
+        "predicted_class_index": class_index,
+        "predicted_class_name": class_name
+    })
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

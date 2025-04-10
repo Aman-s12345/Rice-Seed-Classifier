@@ -1,0 +1,29 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+env/
+venv/
+.env/
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints
+
+# PyTorch model files
+*.pth
+*.pt
+
+# Environment files
+.env
+
+# System files
+.DS_Store
+
+# VSCode or IDE config
+.vscode/
+.idea/
+
+# Logs
+*.log

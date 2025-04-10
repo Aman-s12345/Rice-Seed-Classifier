@@ -1,0 +1,39 @@
+# Node modules
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+
+# Environment files
+.env
+.env.*.local
+.env.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE configs
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+*.lcov
+
+# Misc
+*.tgz
+*.log
+
+# Optional: Ignore lock files if using a different package manager
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
