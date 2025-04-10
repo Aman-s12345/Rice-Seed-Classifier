@@ -27,3 +27,6 @@ venv/
 
 # Logs
 *.log
+
+!backend/models/
+!backend/models/fpn_model.pth
